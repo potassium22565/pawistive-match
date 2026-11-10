@@ -1,0 +1,15 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {match,rank,evaluate,validateDogs} from '../js/engine.js';
+const dogs=JSON.parse(fs.readFileSync(new URL('../data/dogs.json',import.meta.url)));
+const a={activity:'1',alone:'4',training:'2',medical:'yes',exercise:'yes',children:'yes',cats:'yes',dogs:'no'};
+test('valid sample records and duplicate rejection',()=>{assert.equal(validateDogs(dogs).length,6);assert.throws(()=>validateDogs([...dogs,dogs[0]]));});
+test('documented cat conflict is excluded despite other strengths',()=>{assert.ok(match(dogs[1],a).blocked.length);assert.ok(!rank(dogs,a).some(m=>m.dog.id===dogs[1].id));});
+test('unknown cat compatibility requires review',()=>{assert.ok(match(dogs[0],a).concerns.some(s=>s.includes('cats')));});
+test('medical requirement overrides weighted score',()=>{assert.ok(match(dogs[3],{...a,medical:'no'}).blocked.length);});
+test('adopted dogs do not rank',()=>{assert.equal(rank([{...dogs[0],status:'adopted'}],a).length,0);});
+test('deterministic scores remain bounded',()=>{for(const activity of ['1','2','3'])for(const alone of ['2','4','6','8'])for(const d of dogs){const m=match(d,{...a,activity,alone});assert.ok(m.score>=0&&m.score<=100);}assert.deepEqual(rank(dogs,a),rank(dogs,a));});
+test('historical ranking measures exclusion as a miss',()=>{const r=evaluate([{id:'x',adopter:a,dogs,adoptedDogId:dogs[1].id}]);assert.equal(r.rows[0].rank,null);assert.equal(r.top3,0);});
+test('empty evaluation has no fabricated rate',()=>assert.equal(evaluate([]).top3,null));
+test('hostile image schemes rejected',()=>assert.throws(()=>validateDogs([{...dogs[0],photo:'javascript:alert(1)'}])));
